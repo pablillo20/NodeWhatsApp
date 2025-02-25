@@ -86,12 +86,12 @@
             socket.on("usuariosConectados", (data) => {
                 let listaUsuarios = document.getElementById("lista-usuarios");
                 listaUsuarios.innerHTML = "";
-                data.usuarios.forEach(usuario => {
+                data.forEach(usuario => {
                     let usuarioElement = document.createElement("li");
                     usuarioElement.innerHTML = `<img src="${usuario.perfil}" class="perfil-img-chat"> ${usuario.nombre} (${usuario.estado})`;
                     listaUsuarios.appendChild(usuarioElement);
                 });
-                document.getElementById("usuarios").querySelector("h2").innerText = `Usuarios Conectados (${data.total})`;
+                document.getElementById("usuarios").querySelector("h2").innerText = `Usuarios Conectados (${data.length})`;
             });
 
             let input = document.getElementById("input");
