@@ -1,0 +1,261 @@
+<!DOCTYPE html>
+<html lang="es">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>WhatsApp</title>
+    <link rel="stylesheet" href="styles.css">
+    <script src="/socket.io/socket.io.js"></script>
+    <script>
+        document.addEventListener("DOMContentLoaded", () => {
+            const socket = io();
+            let nombre;
+            let perfilUrl;
+
+            // Manejar el envío del formulario de identificación
+            document.getElementById("formulario").addEventListener("submit", (event) => {
+                event.preventDefault();
+                nombre = document.getElementById("nombre").value;
+                let estado = document.getElementById("estado").value;
+                let perfilInput = document.querySelector('input[name="perfil"]:checked');
+                let perfilFile = document.getElementById("perfil-file").files[0];
+                let fondoInput = document.querySelector('input[name="fondo"]:checked');
+                let fondoFile = document.getElementById("fondo-file").files[0];
+                let fondoUrl;
+
+                // Manejar la selección de imagen de perfil y fondo de chat
+                if (perfilFile) {
+                    let reader = new FileReader(); // Crear un objeto FileReader
+                    reader.onload = function (event) {
+                        perfilUrl = event.target.result; // Obtener la URL base64 del archivo
+                        if (fondoFile) {
+                            let fondoReader = new FileReader();
+                            fondoReader.onload = function (event) {
+                                fondoUrl = event.target.result;
+                                iniciarChat(nombre, estado, perfilUrl, fondoUrl);
+                            };
+                            fondoReader.readAsDataURL(fondoFile);
+                        } else if (fondoInput) {
+                            fondoUrl = fondoInput.value;
+                            iniciarChat(nombre, estado, perfilUrl, fondoUrl);
+                        } else {
+                            alert("Por favor, selecciona un fondo de chat.");
+                        }
+                    };
+                    reader.readAsDataURL(perfilFile); // Convertir el archivo en una URL en base64
+                } else if (perfilInput) {
+                    perfilUrl = perfilInput.value;
+                    if (fondoFile) {
+                        let fondoReader = new FileReader();
+                        fondoReader.onload = function (event) {
+                            fondoUrl = event.target.result;
+                            iniciarChat(nombre, estado, perfilUrl, fondoUrl);
+                        };
+                        fondoReader.readAsDataURL(fondoFile);
+                    } else if (fondoInput) {
+                        fondoUrl = fondoInput.value;
+                        iniciarChat(nombre, estado, perfilUrl, fondoUrl);
+                    } else {
+                        alert("Por favor, selecciona un fondo de chat.");
+                    }
+                } else {
+                    alert("Por favor, completa todos los campos.");
+                }
+            });
+
+            // Iniciar el chat con los datos proporcionados
+            function iniciarChat(nombre, estado, perfilUrl, fondoUrl) {
+                document.getElementById("formulario-container").style.display = "none";
+                document.getElementById("chat-container").style.display = "flex";
+                let chatElement = document.getElementById("chat");
+                if (fondoUrl === "img/fondo-blanco.jpg") {
+                    chatElement.style.backgroundColor = "white";
+                    chatElement.style.backgroundImage = "none";
+                } else if (fondoUrl === "img/fondo-negro.jpg") {
+                    chatElement.style.backgroundColor = "black";
+                    chatElement.style.backgroundImage = "none";
+                } else {
+                    chatElement.style.backgroundImage = `url(${fondoUrl})`;
+                    chatElement.style.backgroundSize = "cover";
+                }
+                socket.emit("identificacion", { nombre: nombre, estado: estado, perfil: perfilUrl });
+            }
+
+            // Actualizar la lista de usuarios conectados
+            socket.on("usuariosConectados", (data) => {
+                let listaUsuarios = document.getElementById("lista-usuarios");
+                listaUsuarios.innerHTML = "";
+                data.usuarios.forEach(usuario => {
+                    let usuarioElement = document.createElement("li");
+                    usuarioElement.innerHTML = `<img src="${usuario.perfil}" class="perfil-img-chat"> ${usuario.nombre} (${usuario.estado})`;
+                    listaUsuarios.appendChild(usuarioElement);
+                });
+                document.getElementById("usuarios").querySelector("h2").innerText = `Usuarios Conectados (${data.total})`;
+            });
+
+            let input = document.getElementById("input");
+            let btnEnviar = document.getElementById("enviar");
+            let listaMensajes = document.getElementById("lista-mensajes");
+            let imageInput = document.getElementById("image");
+            let enviarImg = document.getElementById("enviarImg");
+            let grabarAudio = document.getElementById("grabarAudio");
+            let mediaRecorder;
+            let audioChunks = [];
+            let grabando = false;
+
+            // Manejar la grabación de audio
+            grabarAudio.addEventListener("click", () => {
+                if (!grabando) {
+                    navigator.mediaDevices.getUserMedia({ audio: true })
+                        .then(stream => {
+                            mediaRecorder = new MediaRecorder(stream);
+                            mediaRecorder.start();
+                            grabando = true;
+                            grabarAudio.innerText = "Stop";
+
+                            mediaRecorder.addEventListener("dataavailable", event => {
+                                audioChunks.push(event.data);
+                            });
+
+                            mediaRecorder.addEventListener("stop", () => {
+                                let audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
+                                audioChunks = [];
+                                let reader = new FileReader();
+                                reader.onload = function (event) {
+                                    socket.emit("mensajeAudio", { nombre: nombre, mensaje: event.target.result, perfil: perfilUrl });
+                                };
+                                reader.readAsDataURL(audioBlob);
+                                grabando = false;
+                                grabarAudio.innerText = "Grabar Audio";
+                            });
+                        });
+                } else {
+                    mediaRecorder.stop();
+                }
+            });
+
+            // Manejar el envío de mensajes de texto
+            function enviarMensaje() {
+                let mensaje = input.value;
+                if (mensaje.trim() !== "") {
+                    socket.emit("mensaje", { nombre: nombre, mensaje: mensaje, perfil: perfilUrl });
+                    input.value = "";
+                }
+            }
+
+            btnEnviar.addEventListener("click", enviarMensaje);
+
+            input.addEventListener("keypress", (event) => {
+                if (event.key === "Enter") {
+                    enviarMensaje();
+                }
+            });
+
+            // Manejar el envío de imágenes
+            enviarImg.addEventListener("click", () => {
+                let file = imageInput.files[0];
+                if (file) {
+                    let reader = new FileReader();
+                    reader.onload = function (event) {
+                        socket.emit("mensajeImagen", { nombre: nombre, mensaje: event.target.result, perfil: perfilUrl });
+                    };
+                    reader.readAsDataURL(file);
+                    imageInput.value = "";
+                }
+            });
+
+            // Mostrar mensajes de texto recibidos
+            socket.on("nuevoMensaje", (datos) => {
+                let mensajeElement = document.createElement("li");
+                mensajeElement.classList.add(datos.nombre === nombre ? "mensaje-propio" : "mensaje-otro");
+                mensajeElement.innerHTML = `<img src="${datos.perfil}" class="perfil-img-chat"> <strong>${datos.nombre}:</strong> ${datos.mensaje}`;
+                listaMensajes.appendChild(mensajeElement);
+            });
+
+            // Mostrar imágenes recibidas
+            socket.on("nuevoMensajeImagen", (datos) => {
+                let mensajeElement = document.createElement("li");
+                mensajeElement.classList.add(datos.nombre === nombre ? "mensaje-propio" : "mensaje-otro");
+                mensajeElement.innerHTML = `<img src="${datos.perfil}" class="perfil-img-chat"> <strong>${datos.nombre}:</strong> <img src="${datos.mensaje}" class="imagen-chat">`;
+                listaMensajes.appendChild(mensajeElement);
+            });
+
+            // Mostrar mensajes de audio recibidos
+            socket.on("nuevoMensajeAudio", (datos) => {
+                let mensajeElement = document.createElement("li");
+                mensajeElement.classList.add(datos.nombre === nombre ? "mensaje-propio" : "mensaje-otro");
+                mensajeElement.innerHTML = `<img src="${datos.perfil}" class="perfil-img-chat"> <strong>${datos.nombre}:</strong> <audio controls src="${datos.mensaje}"></audio>`;
+                listaMensajes.appendChild(mensajeElement);
+            });
+
+            // Notificar cuando un usuario está escribiendo
+            input.addEventListener("input", () => {
+                socket.emit("escribiendo", nombre);
+            });
+
+            socket.on("usuarioEscribiendo", (nombre) => {
+                document.getElementById("escribiendo").innerText = `${nombre} está escribiendo...`;
+                setTimeout(() => {
+                    document.getElementById("escribiendo").innerText = "";
+                }, 3000);
+            });
+
+            // Mostrar notificaciones de conexión/desconexión
+            socket.on("mostrarNotificacion", (mensaje) => {
+                let notificacion = document.createElement("div");
+                notificacion.classList.add("notificacion");
+                notificacion.innerText = mensaje;
+                document.body.appendChild(notificacion);
+                setTimeout(() => {
+                    notificacion.remove();
+                }, 3000);
+            });
+        });
+    </script>
+</head>
+
+<body>
+    <!-- Contenedor del formulario de identificación -->
+    <div id="formulario-container">
+        <form id="formulario">
+            <h2>Identifícate</h2>
+            <input type="text" id="nombre" placeholder="Nombre" required>
+            <input type="text" id="estado" placeholder="Estado" required>
+            <h3>Elige una imagen de perfil:</h3>
+            <label><input type="radio" name="perfil" value="img/perfil1.jpg"><img src="img/perfil1.jpg"
+                    class="perfil-img"></label>
+            <label><input type="radio" name="perfil" value="img/perfil2.jpg"><img src="img/perfil2.jpg"
+                    class="perfil-img"></label>
+            <label><input type="radio" name="perfil" value="img/perfil3.jpg"><img src="img/perfil3.jpg"
+                    class="perfil-img"></label>
+            <label><input type="file" id="perfil-file"></label>
+            <h3>Elige un fondo de chat:</h3>
+            <label><input type="radio" name="fondo" value="img/fondo-blanco.jpg">Blanco</label>
+            <label><input type="radio" name="fondo" value="img/fondo-negro.jpg">Negro</label>
+            <label><input type="file" id="fondo-file"></label>
+            <button type="submit">Entrar</button>
+        </form>
+    </div>
+
+    <!-- Contenedor del chat -->
+    <div id="chat-container" style="display: none;">
+        <aside id="usuarios">
+            <h2>Usuarios</h2>
+            <ul id="lista-usuarios"></ul>
+        </aside>
+        <section id="chat">
+            <ul id="lista-mensajes"></ul>
+            <div id="escribiendo"></div>
+            <div id="input-container">
+                <input id="input" placeholder="Escribe un mensaje...">
+                <button id="enviar">▶</button>
+                <input type="file" id="image">
+                <button id="enviarImg">Enviar Imagen</button>
+                <button id="grabarAudio">Grabar Audio</button>
+            </div>
+        </section>
+    </div>
+</body>
+
+</html>
