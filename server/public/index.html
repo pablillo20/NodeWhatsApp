@@ -99,41 +99,6 @@
             let listaMensajes = document.getElementById("lista-mensajes");
             let imageInput = document.getElementById("image");
             let enviarImg = document.getElementById("enviarImg");
-            let grabarAudio = document.getElementById("grabarAudio");
-            let mediaRecorder;
-            let audioChunks = [];
-            let grabando = false;
-
-            // Manejar la grabación de audio
-            grabarAudio.addEventListener("click", () => {
-                if (!grabando) {
-                    navigator.mediaDevices.getUserMedia({ audio: true })
-                        .then(stream => {
-                            mediaRecorder = new MediaRecorder(stream);
-                            mediaRecorder.start();
-                            grabando = true;
-                            grabarAudio.innerText = "Stop";
-
-                            mediaRecorder.addEventListener("dataavailable", event => {
-                                audioChunks.push(event.data);
-                            });
-
-                            mediaRecorder.addEventListener("stop", () => {
-                                let audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-                                audioChunks = [];
-                                let reader = new FileReader();
-                                reader.onload = function (event) {
-                                    socket.emit("mensajeAudio", { nombre: nombre, mensaje: event.target.result, perfil: perfilUrl });
-                                };
-                                reader.readAsDataURL(audioBlob);
-                                grabando = false;
-                                grabarAudio.innerText = "Grabar Audio";
-                            });
-                        });
-                } else {
-                    mediaRecorder.stop();
-                }
-            });
 
             // Manejar el envío de mensajes de texto
             function enviarMensaje() {
@@ -252,7 +217,6 @@
                 <button id="enviar">▶</button>
                 <input type="file" id="image">
                 <button id="enviarImg">Enviar Imagen</button>
-                <button id="grabarAudio">Grabar Audio</button>
             </div>
         </section>
     </div>
